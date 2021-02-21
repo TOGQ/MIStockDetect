@@ -9,6 +9,6 @@
 	"itemQueryApiPre": "https://api2.order.mi.com/product/delivery?goods_ids=",
 	"itemQueryApiParam":"&item_ids=&province_id=17&city_id=202&district_id=1947&area=1947006&t=",
 	"options": [1],
-	"interval": 1,
-	"startTime":"2021-02-20T22:50:00"
+	"interval": 0.1,
+	"startTime":"2025-01-01T10:00:00"
 }

@@ -6,66 +6,71 @@ var buyLock = false;
 var restryCount = 1;
 var actionCount = 0;
 var config;
-
+var isItemPage = false;
+var finished = false;
 
 async function start(browser, page) {
-    if (!config) {
-        throw new Error('请通过setConfig(Object)方法设置配置！');
-    }
-    await login(page);
-    await goto(page, config.itemUrl, 'a[data-href^="//order.mi.com/site/login"]');
-    await page.click('a[data-href^="//order.mi.com/site/login"]');
-    await page.waitForTimeout(1500);
-    let agree = await page.$('.el-dialog__footer .btn-primary');
-    if (agree) {
-        await agree.click();
-        await page.waitForTimeout(1500);
+
+    if (!isItemPage) {
+        await preAction(page);
     }
 
-    console.log('开始尝试下单...');
-    
-    //选择选项,如果采用有库存的时候才选择选项来刷新按钮（可能会和默认的选项一致，那么就不会达到刷新按钮的目的）
-    await optionSelect(page, config.options);
+    //立即执行一次
+    await run(browser, page);
 
+    if (finished) { return };
     const timer = setInterval(async () => {
-        if (buyLock) { return; }
-        if (restryCount > 5) {
-            await stop(timer, browser);
-            return;
-        }
-        try {
-            if (await canBuy(page)) {
-                buyLock = true;
-                if (actionCount > -1) {
-                    //刷新按钮
-                    await refreshBtn(page, goodsInfo.optionInfo, config.options);
-                }
-                // clearInterval(timer);
-                // return;
-                await buy(page);
-                await stop(timer, browser);
-            } else {
-                console.error("无货状态！");
-            }
-        } catch (error) {
-            console.log("第" + restryCount + "次重试！");
-            buyLock = false;
-            restryCount++;
-            await goto(page, config.itemUrl, '.option-box li');
-            await optionSelect(page, config.options);
-            console.log(error);
-        } finally {
-            actionCount++;
-        }
-    }, Math.max(config.interval * 1000, 50));
+        await run(browser, page, timer);
+    }, Math.max(config.interval * 1000, 80));
 }
 
 async function login(page) {
     await goto(page, config.loginUrl, 'input[name=account]');
     await page.type('input[name=account]', config.username, { delay: 100 });
     await page.type('input[name=password]', config.password, { delay: 100 });
-    await page.click('button[type=submit]');
-    await page.waitForTimeout(3000);
+    await Promise.all([
+        page.waitForNavigation(),
+        page.click('button[type=submit]')
+
+    ]);
+}
+
+async function preAction(page) {
+
+    if (isItemPage) {
+        return;
+    }
+
+    if (!config) {
+        throw new Error('请通过setConfig(Object)方法设置配置！');
+    }
+
+    let startTime = new Date();
+
+    await login(page);
+    await goto(page, config.itemUrl, 'a[data-href^="//order.mi.com/site/login"]');
+    await page.click('a[data-href^="//order.mi.com/site/login"]');
+
+    try {
+        await page.waitForSelector('.mi-popup', { timeout: 2000 })
+    } catch (e) {
+        //
+    }
+
+    let agree = await page.$('.el-dialog__footer .btn-primary');
+    if (agree) {
+        await agree.click();
+        await page.waitForResponse(res => res.url().startsWith('https://api2.order.mi.com/product/delivery') && res.status() == 200);
+    }
+
+    console.log('请等待...');
+
+    //选择选项,如果采用有库存的时候才选择选项来刷新按钮（可能会和默认的选项一致，那么就不会达到刷新按钮的目的）
+    await optionSelect(page, config.options);
+
+    console.log('从登录到商品页面总计耗时：', new Date().getTime() - startTime);
+
+    isItemPage = true;
 }
 
 async function optionSelect(page, userOptions, batchIndex) {
@@ -176,12 +181,13 @@ async function buy(page) {
     let pay_time = await page.$eval('.pay-time-tip', el => el.textContent);
     console.log("下单成功！请在" + pay_time + "内手动支付!");
 
+    finished = true;
     //发送邮件
     email(goodsInfo.name, pay_time).catch(console.error);
 }
 
 async function canBuy(page) {
-    return await page.evaluate((goodsId, api) => {
+    return page.evaluate((goodsId, api) => {
         return new Promise((resolve, reject) => {
             fetch(api)
                 .then(res => res.json()).then(json => {
@@ -211,8 +217,40 @@ function countDown(startTime) {
     }, 1000)
 }
 
+async function run(browser, page, timer) {
+    if (buyLock) { return; }
+    if (restryCount > 5) {
+        await stop(timer, browser);
+        return;
+    }
+    try {
+        if (await canBuy(page)) {
+            buyLock = true;
+            if (actionCount > 1) {
+                //刷新按钮
+                await refreshBtn(page, goodsInfo.optionInfo, config.options);
+            }
+            // clearInterval(timer);
+            // return;
+            await buy(page);
+            await stop(timer, browser);
+        } else {
+            console.error(new Date().toLocaleString(), " 无货状态！");
+        }
+    } catch (error) {
+        console.log("第" + restryCount + "次重试！");
+        buyLock = false;
+        restryCount++;
+        await goto(page, config.itemUrl, '.option-box li');
+        await optionSelect(page, config.options);
+        console.log(error);
+    } finally {
+        actionCount++;
+    }
+}
+
 async function stop(timer, browser) {
-    clearInterval(timer);
+    timer && clearInterval(timer);
     await browser.close();
 }
 
@@ -223,3 +261,4 @@ function setConfig(conf) {
 exports.start = start;
 exports.setConfig = setConfig;
 exports.countDown = countDown;
+exports.preAction = preAction;

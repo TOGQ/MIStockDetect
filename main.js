@@ -20,11 +20,23 @@ async function run(browser, page) {
     core.setConfig(config);
 
     if (config.startTime) {
-        let timeDiff = new Date(config.startTime) - new Date();
+
         core.countDown(config.startTime);
+
+        let timeDiff = new Date(config.startTime) - new Date();
+        let preActionTime = 8000;
+
+        //登录等待的6-8s左右时间加提前1秒开始(根据网络情况适当调整改值)
+        // let awaitStartTime = timeDiff - preActionTime - 1000;
+        let awaitStartTime = timeDiff - 1000;
+
         setTimeout(() => {
             core.start(browser, page);
-        }, timeDiff > 0 ? timeDiff - 12500 : 0);//登录等待的8-10s左右时间加提前2.5秒开始(根据网络情况适当调整改值)
+        }, awaitStartTime > 0 ? awaitStartTime : 0);
+
+        //提前登录，那么就不需要再减去preActionTime;
+        await core.preAction(page);
+        
     } else {
         core.start(browser, page);
     }
