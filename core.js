@@ -3,6 +3,7 @@ const goodsInfo = {
     name: ""
 };
 var buyLock = false;
+var loginLock = false;
 var restryCount = 1;
 var actionCount = 0;
 var config;
@@ -11,6 +12,7 @@ var finished = false;
 
 async function start(browser, page) {
 
+    
     if (!isItemPage) {
         await preAction(page);
     }
@@ -37,9 +39,11 @@ async function login(page) {
 
 async function preAction(page) {
 
-    if (isItemPage) {
+    if (isItemPage || loginLock) {
         return;
     }
+    //锁住登录状态（怕是调用了提前登录，还没有登录成功定时任务就到了，而此时并没有登录完成，定时任务中就会再登录）
+    loginLock = true;
 
     if (!config) {
         throw new Error('请通过setConfig(Object)方法设置配置！');
@@ -66,7 +70,7 @@ async function preAction(page) {
     console.log('请等待...');
 
     //选择选项,如果采用有库存的时候才选择选项来刷新按钮（可能会和默认的选项一致，那么就不会达到刷新按钮的目的）
-    await optionSelect(page, config.options);
+    await optionSelect(page, config.options, config.batchIndex);
 
     console.log('从登录到商品页面总计耗时：', new Date().getTime() - startTime);
 
@@ -124,7 +128,7 @@ async function goto(page, url, waitForSelector) {
     await page.waitForSelector(waitForSelector);
 };
 
-async function refreshBtn(page, optionInfo, userOptions) {
+async function refreshBtn(page, optionInfo, userOptions, batchIndex) {
     if (!optionInfo.index) {
         //说明所有都是一个选项，只能刷新页面
         await page.reload();
@@ -136,7 +140,7 @@ async function refreshBtn(page, optionInfo, userOptions) {
 
         await page.waitForResponse(response => response.url().startsWith('https://api2.order.mi.com/product/delivery') && response.status() === 200);
         //点击回来
-        await optionSelect(page, userOptions);
+        await optionSelect(page, userOptions, batchIndex);
     }
     await page.waitForSelector('.sale-btn a');
 }
@@ -204,21 +208,22 @@ function countDown(startTime) {
     const startDate = new Date(startTime);
     const action = setInterval(() => {
         let timeDiff = startDate - new Date();
+        if (timeDiff <= 0) {
+            clearInterval(action);
+            return;
+        }
+        console.clear();
         let day = Math.floor(timeDiff / dayms)
         let hour = Math.floor(timeDiff % dayms / hms)
         let minu = Math.floor(timeDiff % dayms % hms / mms)
         let secon = Math.floor(timeDiff % dayms % hms % mms / 1000)
-        let res = day + hour + minu + secon;
-        console.clear();
         console.log('距离：' + startTime.replace('T', ' ') + ' 还有：' + day + '天' + hour + '小时' + minu + '分钟' + secon + '秒')
-        if (res <= 0) {
-            clearInterval(action);
-        }
     }, 1000)
 }
 
 async function run(browser, page, timer) {
-    if (buyLock) { return; }
+    //正在下单，或者还没有登录成功（例如到了定时时间，登录还在进行，出现此情况就是，使用提前登录而定时的时候很快就要到了）
+    if (buyLock || !isItemPage) { return; }
     if (restryCount > 5) {
         await stop(timer, browser);
         return;
@@ -228,7 +233,7 @@ async function run(browser, page, timer) {
             buyLock = true;
             if (actionCount > 1) {
                 //刷新按钮
-                await refreshBtn(page, goodsInfo.optionInfo, config.options);
+                await refreshBtn(page, goodsInfo.optionInfo, config.options, config.batchIndex);
             }
             // clearInterval(timer);
             // return;
@@ -242,7 +247,7 @@ async function run(browser, page, timer) {
         buyLock = false;
         restryCount++;
         await goto(page, config.itemUrl, '.option-box li');
-        await optionSelect(page, config.options);
+        await optionSelect(page, config.options, config.batchIndex);
         console.log(error);
     } finally {
         actionCount++;
