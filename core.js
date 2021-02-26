@@ -103,11 +103,11 @@ async function optionSelect(page, userOptions, batchIndex) {
     // console.log('当前选项：' + goodsInfo.optionInfo.currentOptions);
     // console.log('用户选项：' + userOptions);
     for (let i = 0; i < goodsInfo.optionInfo.size; i++) {
+        //判断是否和默认相同，相同则无需选择
         if (goodsInfo.optionInfo.currentOptions[i] != undefined && goodsInfo.optionInfo.currentOptions[i] == userOptions[i] - 1) {
             // console.log('跳过');
             continue;
         }
-        //判断是否和默认相同，相同则无需选择
         await page.click(`.buy-option>.buy-box-child:nth-child(${i + 1}) li:nth-child(${userOptions[i]})`)
         //点击后的等待数据请求后
         await page.waitForResponse(res => res.url().startsWith('https://api2.order.mi.com/product/delivery') && res.status() == 200);
@@ -116,7 +116,8 @@ async function optionSelect(page, userOptions, batchIndex) {
     //选择套餐
     if (batchIndex) {
         try {
-            await page.click(`.batch-box li:nth-child(${batchIndex - 1})`);
+            //修改错误：nth-child下标从1开始
+            await page.click(`.batch-box li:nth-child(${batchIndex})`);
         } catch (e) {
             console.log('没有套餐可以选择！');
         }
