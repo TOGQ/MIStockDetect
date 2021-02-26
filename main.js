@@ -1,10 +1,10 @@
 const puppeteer = require('puppeteer-core');
-const config = require('./config-test');
+const config = require('./config');
 const core = require('./core');
 
 (async function () {
     puppeteer.launch({
-        headless: false,
+        headless: true,
         defaultViewport: null,
         args: ['--start-maximized'],
         ignoreDefaultArgs: ['--enable-automation'],

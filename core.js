@@ -12,7 +12,7 @@ var finished = false;
 
 async function start(browser, page) {
 
-    
+
     if (!isItemPage) {
         await preAction(page);
     }
@@ -148,7 +148,7 @@ async function refreshBtn(page, optionInfo, userOptions, batchIndex) {
 async function buy(page) {
     //加入购物车
     await Promise.all([
-        page.waitForNavigation(),
+        page.waitForNavigation({ timeout: 2000 }),
         page.click('.sale-btn a')
     ]);
     console.log('加入购物车成功！');
@@ -234,6 +234,8 @@ async function run(browser, page, timer) {
             if (actionCount > 1) {
                 //刷新按钮
                 await refreshBtn(page, goodsInfo.optionInfo, config.options, config.batchIndex);
+                //等待500毫秒，实际开始时间会晚个1-2秒
+                await page.waitFor(500);
             }
             // clearInterval(timer);
             // return;
